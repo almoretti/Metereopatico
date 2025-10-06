@@ -966,7 +966,8 @@ fun ThreeDayForecastCard(weatherData: List<WeatherDay>) {
                     day = dayLabel,
                     condition = weather.hourly.firstOrNull()?.weatherDesc?.firstOrNull()?.value ?: "Clear",
                     high = "${weather.maxtempC}°",
-                    low = "${weather.mintempC}°"
+                    low = "${weather.mintempC}°",
+                    weatherCode = weather.hourly.firstOrNull()?.weatherCode ?: ""
                 )
 
                 if (index < 2) {
@@ -986,7 +987,8 @@ fun DayForecastItem(
     day: String,
     condition: String,
     high: String,
-    low: String
+    low: String,
+    weatherCode: String = ""
 ) {
     Row(
         modifier = Modifier
@@ -1001,7 +1003,7 @@ fun DayForecastItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Default.Cloud,
+                getWeatherIcon(condition, weatherCode),
                 contentDescription = condition,
                 tint = Color(0xFF64B5F6),
                 modifier = Modifier.size(36.dp)
@@ -1097,6 +1099,46 @@ fun AstronomyCard(astronomy: AstroData) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Moon Phase (at top, larger)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = getMoonPhaseEmoji(astronomy.moon_phase),
+                            fontSize = 56.sp
+                        )
+                        Spacer(modifier = Modifier.width(20.dp))
+                        Column {
+                            Text(
+                                text = "Moon Phase",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF757575)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = astronomy.moon_phase,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF212121)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             // Sun Times
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1121,7 +1163,7 @@ fun AstronomyCard(astronomy: AstroData) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Moon Times and Phase
+            // Moon Times
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -1141,45 +1183,6 @@ fun AstronomyCard(astronomy: AstroData) {
                     color = Color(0xFF5C6BC0),
                     backgroundColor = Color(0xFFE8EAF6)
                 )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Moon Phase (centered, larger)
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFAFAFA))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = getMoonPhaseEmoji(astronomy.moon_phase),
-                            fontSize = 40.sp
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text(
-                                text = "Moon Phase",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF757575)
-                            )
-                            Text(
-                                text = astronomy.moon_phase,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF212121)
-                            )
-                        }
-                    }
-                }
             }
         }
     }
