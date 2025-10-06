@@ -126,6 +126,11 @@ fun WeatherScreen(
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Autocomplete state
+    var locationSuggestions by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
+    var showSuggestions by remember { mutableStateOf(false) }
+    var searchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     
     // Location permissions
     val locationPermissionsState = rememberMultiplePermissionsState(
@@ -137,8 +142,35 @@ fun WeatherScreen(
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
-    
-    
+
+    // Debounced search function for autocomplete
+    fun searchLocationSuggestions(query: String) {
+        // Cancel previous search job
+        searchJob?.cancel()
+
+        if (query.isBlank()) {
+            locationSuggestions = emptyList()
+            showSuggestions = false
+            return
+        }
+
+        // Start new search with 300ms delay
+        searchJob = coroutineScope.launch {
+            kotlinx.coroutines.delay(300)
+            try {
+                android.util.Log.d("Autocomplete", "Searching for: $query")
+                val suggestions = RetrofitInstance.geocodingApi.searchLocations(query)
+                android.util.Log.d("Autocomplete", "Found ${suggestions.size} suggestions")
+                locationSuggestions = suggestions
+                showSuggestions = suggestions.isNotEmpty()
+            } catch (e: Exception) {
+                android.util.Log.e("Autocomplete", "Search error: ${e.message}", e)
+                locationSuggestions = emptyList()
+                showSuggestions = false
+            }
+        }
+    }
+
     // Auto-search when a location is selected from favorites
     LaunchedEffect(selectedLocation) {
         selectedLocation?.let { location ->
@@ -154,7 +186,14 @@ fun WeatherScreen(
                 }
                 
                 val response = RetrofitInstance.api.getWeatherText(searchQuery)
-                val parts = response.trim().split("+")
+                val parts = response.trim().split("|")
+
+                // DEBUG: Log what API returns
+                android.util.Log.d("WeatherAPI", "Raw response: $response")
+                android.util.Log.d("WeatherAPI", "Parts: ${parts.joinToString(" | ")}")
+                parts.forEachIndexed { index, part ->
+                    android.util.Log.d("WeatherAPI", "Part[$index]: '$part'")
+                }
 
                 val detailedJson = RetrofitInstance.api.getDetailedWeather(searchQuery)
                 detailedWeather = RetrofitInstance.gson.fromJson(detailedJson, DetailedWeatherResponse::class.java)
@@ -275,7 +314,10 @@ fun WeatherScreen(
                         ) {
                             OutlinedTextField(
                                 value = cityName,
-                                onValueChange = { cityName = it },
+                                onValueChange = { newValue ->
+                                    cityName = newValue
+                                    searchLocationSuggestions(newValue)
+                                },
                                 placeholder = { Text("Enter city name...") },
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                 modifier = Modifier.weight(1f),
@@ -302,19 +344,24 @@ fun WeatherScreen(
                                                         coroutineScope.launch {
                                                             try {
                                                                 val coords = "${it.latitude},${it.longitude}"
-                                                                
+
                                                                 val response = RetrofitInstance.api.getWeatherText(coords)
-                                                                val parts = response.trim().split("+")
-                                                                
+                                                                val parts = response.trim().split("|")
+
+                                                                // DEBUG: Log what API returns
+                                                                android.util.Log.d("WeatherAPI", "Raw response: $response")
+                                                                android.util.Log.d("WeatherAPI", "Parts: ${parts.joinToString(" | ")}")
+                                                                parts.forEachIndexed { index, part ->
+                                                                    android.util.Log.d("WeatherAPI", "Part[$index]: '$part'")
+                                                                }
+
                                                                 val detailedJson = RetrofitInstance.api.getDetailedWeather(coords)
                                                                 detailedWeather = RetrofitInstance.gson.fromJson(detailedJson, DetailedWeatherResponse::class.java)
-                                                                
+
                                                                 val locationName = detailedWeather?.nearest_area?.firstOrNull()?.let { area ->
-                                                                    val city = area.areaName.firstOrNull()?.value ?: ""
-                                                                    val country = area.country.firstOrNull()?.value ?: ""
-                                                                    if (city.isNotEmpty()) "$city, $country" else "Current Location"
+                                                                    area.areaName.firstOrNull()?.value ?: "Current Location"
                                                                 } ?: "Current Location"
-                                                                
+
                                                                 cityName = locationName
 
                                                                 weatherData = WeatherData(
@@ -362,7 +409,14 @@ fun WeatherScreen(
                                             hasError = false
                                             try {
                                                 val response = RetrofitInstance.api.getWeatherText(cityName)
-                                                val parts = response.trim().split("+")
+                                                val parts = response.trim().split("|")
+
+                                                // DEBUG: Log what API returns
+                                                android.util.Log.d("WeatherAPI", "Raw response: $response")
+                                                android.util.Log.d("WeatherAPI", "Parts: ${parts.joinToString(" | ")}")
+                                                parts.forEachIndexed { index, part ->
+                                                    android.util.Log.d("WeatherAPI", "Part[$index]: '$part'")
+                                                }
 
                                                 val detailedJson = RetrofitInstance.api.getDetailedWeather(cityName)
                                                 detailedWeather = RetrofitInstance.gson.fromJson(detailedJson, DetailedWeatherResponse::class.java)
@@ -402,7 +456,35 @@ fun WeatherScreen(
                             }
                         }
                     }
-                    
+
+                    // Autocomplete Dropdown
+                    if (showSuggestions && locationSuggestions.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier.heightIn(max = 250.dp)
+                            ) {
+                                items(locationSuggestions) { suggestion ->
+                                    LocationSuggestionItem(
+                                        suggestion = suggestion,
+                                        onClick = {
+                                            // Extract just the city name (first part before comma)
+                                            cityName = suggestion.display_name.split(",").firstOrNull()?.trim() ?: suggestion.display_name
+                                            showSuggestions = false
+                                            locationSuggestions = emptyList()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                 }
                 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -470,6 +552,7 @@ fun WeatherCard(weatherData: WeatherData) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .wrapContentHeight()
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -481,25 +564,27 @@ fun WeatherCard(weatherData: WeatherData) {
                     Icons.Default.LocationOn,
                     contentDescription = "Location",
                     tint = Color(0xFF1976D2),
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = weatherData.city,
-                    fontSize = 24.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF1976D2)
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Main Temperature Display
+            // Main Temperature Display - 100% bigger
             Text(
                 text = weatherData.temperature,
                 fontSize = 72.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1976D2)
+                color = Color(0xFF1976D2),
+                maxLines = 1,
+                modifier = Modifier.wrapContentHeight()
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -512,18 +597,18 @@ fun WeatherCard(weatherData: WeatherData) {
                     getWeatherIcon(weatherData.condition, weatherData.weatherCode),
                     contentDescription = "Weather",
                     tint = Color(0xFF64B5F6),
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(40.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = weatherData.condition,
-                    fontSize = 22.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFF424242)
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Humidity and Wind Row
             HorizontalDivider(
@@ -544,7 +629,7 @@ fun WeatherCard(weatherData: WeatherData) {
 
                 VerticalDivider(
                     modifier = Modifier
-                        .height(60.dp)
+                        .height(100.dp)
                         .width(1.dp),
                     color = Color(0xFFE3F2FD)
                 )
@@ -569,25 +654,25 @@ fun WeatherMetric(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(8.dp)
+        modifier = Modifier.padding(16.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = color,
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(48.dp)
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFF757575)
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = value,
-            fontSize = 18.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF212121)
         )
@@ -1460,6 +1545,34 @@ fun SavedLocationItem(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun LocationSuggestionItem(
+    suggestion: LocationSuggestion,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.LocationOn,
+            contentDescription = "Location",
+            tint = Color(0xFF1976D2),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = suggestion.display_name,
+            fontSize = 15.sp,
+            color = Color(0xFF212121),
+            maxLines = 2
+        )
     }
 }
 
