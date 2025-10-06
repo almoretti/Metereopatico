@@ -6,7 +6,9 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(rm:*)",
-      "Bash(./gradlew:*)"
+      "Bash(./gradlew:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd weather app with dynamic icons and comprehensive features\n\nImplemented a fully-featured weather application with:\n- Real-time weather data from wttr.in API (no API key required)\n- Dynamic weather icons based on conditions (sunny, cloudy, rainy, snow, etc.)\n- Current weather display with location, temperature, humidity, and wind\n- Detailed weather metrics (feels like, UV index, pressure, visibility)\n- 12-hour hourly forecast with weather icons\n- 3-day forecast with high/low temperatures\n- Astronomy data with sunrise, sunset, moonrise, moonset, and moon phase emoji\n- GPS location support with permissions handling\n- Saved locations functionality with DataStore\n- Material Design 3 UI with gradient backgrounds and modern styling\n- Navigation between main weather and saved locations screens\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": []
   }
