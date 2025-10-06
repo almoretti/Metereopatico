@@ -252,7 +252,7 @@ fun WeatherScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Weather Now",
+                        text = "Metereopatico",
                         fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -478,6 +478,41 @@ fun WeatherScreen(
                                             cityName = suggestion.display_name.split(",").firstOrNull()?.trim() ?: suggestion.display_name
                                             showSuggestions = false
                                             locationSuggestions = emptyList()
+
+                                            // Trigger automatic search
+                                            coroutineScope.launch {
+                                                isLoading = true
+                                                hasError = false
+                                                try {
+                                                    val response = RetrofitInstance.api.getWeatherText(cityName)
+                                                    val parts = response.trim().split("|")
+
+                                                    // DEBUG: Log what API returns
+                                                    android.util.Log.d("WeatherAPI", "Raw response: $response")
+                                                    android.util.Log.d("WeatherAPI", "Parts: ${parts.joinToString(" | ")}")
+                                                    parts.forEachIndexed { index, part ->
+                                                        android.util.Log.d("WeatherAPI", "Part[$index]: '$part'")
+                                                    }
+
+                                                    val detailedJson = RetrofitInstance.api.getDetailedWeather(cityName)
+                                                    detailedWeather = RetrofitInstance.gson.fromJson(detailedJson, DetailedWeatherResponse::class.java)
+
+                                                    weatherData = WeatherData(
+                                                        city = cityName,
+                                                        condition = parts.getOrNull(0)?.trim() ?: "N/A",
+                                                        temperature = parts.getOrNull(1)?.trim() ?: "N/A",
+                                                        humidity = parts.getOrNull(2)?.trim() ?: "N/A",
+                                                        wind = parts.getOrNull(3)?.trim() ?: "N/A",
+                                                        weatherCode = detailedWeather?.current_condition?.firstOrNull()?.weatherCode ?: ""
+                                                    )
+                                                } catch (e: Exception) {
+                                                    hasError = true
+                                                    weatherData = null
+                                                    detailedWeather = null
+                                                } finally {
+                                                    isLoading = false
+                                                }
+                                            }
                                         }
                                     )
                                 }
@@ -732,7 +767,7 @@ fun EmptyStateCard() {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Welcome to Weather Now!",
+                text = "Welcome to Metereopatico!",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1976D2)
