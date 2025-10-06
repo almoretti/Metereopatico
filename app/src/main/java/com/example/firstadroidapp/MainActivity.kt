@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -58,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             FirstAdroidAppTheme {
                 WeatherApp()
@@ -142,6 +145,67 @@ fun WeatherScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
+    // Auto-load current location on app start or when permissions are granted
+    // BUT only if not coming from saved locations (selectedLocation == null)
+    LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
+        if (locationPermissionsState.allPermissionsGranted && weatherData == null && selectedLocation == null) {
+            isLoading = true
+            hasError = false
+            try {
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    CancellationTokenSource().token
+                ).addOnSuccessListener { location ->
+                    location?.let {
+                        coroutineScope.launch {
+                            try {
+                                val coords = "${it.latitude},${it.longitude}"
+
+                                val response = RetrofitInstance.api.getWeatherText(coords)
+                                val parts = response.trim().split("|")
+
+                                // DEBUG: Log what API returns
+                                android.util.Log.d("WeatherAPI", "Raw response: $response")
+                                android.util.Log.d("WeatherAPI", "Parts: ${parts.joinToString(" | ")}")
+                                parts.forEachIndexed { index, part ->
+                                    android.util.Log.d("WeatherAPI", "Part[$index]: '$part'")
+                                }
+
+                                val detailedJson = RetrofitInstance.api.getDetailedWeather(coords)
+                                detailedWeather = RetrofitInstance.gson.fromJson(detailedJson, DetailedWeatherResponse::class.java)
+
+                                val locationName = detailedWeather?.nearest_area?.firstOrNull()?.let { area ->
+                                    area.areaName.firstOrNull()?.value ?: "Current Location"
+                                } ?: "Current Location"
+
+                                cityName = locationName
+
+                                weatherData = WeatherData(
+                                    city = locationName,
+                                    condition = parts.getOrNull(0)?.trim() ?: "N/A",
+                                    temperature = parts.getOrNull(1)?.trim() ?: "N/A",
+                                    humidity = parts.getOrNull(2)?.trim() ?: "N/A",
+                                    wind = parts.getOrNull(3)?.trim() ?: "N/A",
+                                    weatherCode = detailedWeather?.current_condition?.firstOrNull()?.weatherCode ?: ""
+                                )
+                            } catch (e: Exception) {
+                                hasError = true
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    }
+                }.addOnFailureListener {
+                    isLoading = false
+                    hasError = true
+                }
+            } catch (e: SecurityException) {
+                isLoading = false
+                hasError = true
+            }
+        }
+    }
+
     // Debounced search function for autocomplete
     fun searchLocationSuggestions(query: String) {
         // Cancel previous search job
@@ -219,12 +283,12 @@ fun WeatherScreen(
     
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = Color.Transparent
+        containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(paddingValues)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
@@ -234,6 +298,7 @@ fun WeatherScreen(
                         )
                     )
                 )
+                .padding(paddingValues)
         ) {
             Column(
                 modifier = Modifier
@@ -317,13 +382,15 @@ fun WeatherScreen(
                                     cityName = newValue
                                     searchLocationSuggestions(newValue)
                                 },
-                                placeholder = { Text("Enter city name...") },
+                                placeholder = { Text("Enter city name...", color = Color(0xFF757575)) },
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color.Transparent,
-                                    unfocusedBorderColor = Color.Transparent
+                                    unfocusedBorderColor = Color.Transparent,
+                                    focusedTextColor = Color(0xFF212121),
+                                    unfocusedTextColor = Color(0xFF424242)
                                 )
                             )
                             
